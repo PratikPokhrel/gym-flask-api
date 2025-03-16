@@ -122,6 +122,42 @@ class Member(Resource):
 
         return jsonify({"message": f"Member {member_id} deleted successfully"})
 
+
+@app.route('/payments/<int:member_id>', methods=['GET'])
+def get_payment_history(member_id):
+    """Fetches the payment history of a given member."""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Failed to connect to the database"}), 500
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, member_id, amount, payment_date, payment_method, status FROM payments WHERE member_id = %s ORDER BY payment_date DESC",
+            (member_id,)
+        )
+        payments = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        payment_history = [
+            {
+                "id": p[0],
+                "member_id": p[1],
+                "amount": float(p[2]),
+                "payment_date": p[3].strftime('%Y-%m-%d %H:%M:%S'),
+                "payment_method": p[4],
+                "status": p[5]
+            }
+            for p in payments
+        ]
+
+        return jsonify({"payments": payment_history})
+
+    except Exception as e:
+        logging.error(f"Error fetching payment history: {e}")
+        return jsonify({"error": "Failed to fetch payment history"}), 500
+
 # Run the Flask App
 if __name__ == '__main__':
     app.run(debug=True)
