@@ -63,11 +63,12 @@ class MemberList(Resource):
             ]
 
             logger.info(f"Fetched {len(members_list)} members from the database.")
+            print('get members')
             return jsonify({"members": members_list})
 
         except Exception as e:
             logger.error(f"Error fetching members: {str(e)}", exc_info=True)
-            return jsonify({"error": "Internal Server Error"}), 500
+            return jsonify({"error": str(e)}), 500
 
 # Get, Update, and Delete a Single Member
 @api.route('/members/<int:member_id>')
