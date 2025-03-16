@@ -18,7 +18,7 @@ CORS(app)  # ✅ Enable CORS for all routes
 api = Api(app, version='1.0', title='Gym Membership API', description='A simple API for gym membership management')
 
 # Database Connection
-DATABASE_URL = "postgresql://postgres:#Qji-4A9EViZFVF@db.dwqtomuxdcwtyaarjjfs.supabase.co:5432/postgres"
+DATABASE_URL = "postgresql://postgres:#Qji-4A9EViZFVF@db.dwqtomuxdcwtyaarjjfs.supabase.co:5432/postgres?sslmode=require"
 
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL)
