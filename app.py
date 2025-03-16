@@ -123,7 +123,7 @@ class Member(Resource):
         return jsonify({"message": f"Member {member_id} deleted successfully"})
 
 
-@app.route('/payments/<int:member_id>', methods=['GET'])
+@api.route('/payments/<int:member_id>', methods=['GET'])
 def get_payment_history(member_id):
     """Fetches the payment history of a given member."""
     conn = get_db_connection()
