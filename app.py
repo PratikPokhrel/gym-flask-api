@@ -1,14 +1,23 @@
 from flask import Flask, jsonify, request
 from flask_restx import Api, Resource, fields
 from flask_swagger_ui import get_swaggerui_blueprint
+import psycopg2
+import os
 
 # Initialize Flask App and API
 app = Flask(__name__)
 api = Api(app, version='1.0', title='Gym Membership API', description='A simple API for gym membership management')
 
+# Database Connection
+DATABASE_URL = "postgresql://postgres:#Qji-4A9EViZFVF@db.dwqtomuxdcwtyaarjjfs.supabase.co:5432/postgres"
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
 # Swagger UI Setup
-SWAGGER_URL = '/swagger'  # Swagger UI endpoint
-API_URL = '/swagger.json'  # URL to your Swagger JSON file
+SWAGGER_URL = '/swagger'  
+API_URL = '/swagger.json'  
 swagger_ui_blueprint = get_swaggerui_blueprint(
     SWAGGER_URL,
     API_URL,
@@ -16,20 +25,12 @@ swagger_ui_blueprint = get_swaggerui_blueprint(
 )
 app.register_blueprint(swagger_ui_blueprint, url_prefix=SWAGGER_URL)
 
-# Mock Data for Gym Members
-members = [
-    {"id": 1, "name": "John Doe", "email": "john@example.com", "membership": "Gold", "status": "Active"},
-    {"id": 2, "name": "Jane Smith", "email": "jane@example.com", "membership": "Silver", "status": "Active"},
-    {"id": 3, "name": "Bob Brown", "email": "bob@example.com", "membership": "Platinum", "status": "Inactive"}
-]
-
 # Define the Member model
 member_model = api.model('Member', {
     'id': fields.Integer(readOnly=True, description='The member unique identifier'),
-    'name': fields.String(required=True, description='The name of the member'),
-    'email': fields.String(required=True, description='The email address of the member'),
-    'membership': fields.String(required=True, description='The membership type'),
-    'status': fields.String(required=True, description='The membership status')
+    'first_name': fields.String(required=True, description='First name of the member'),
+    'last_name': fields.String(required=True, description='Last name of the member'),
+    'email': fields.String(required=True, description='Email address of the member')
 })
 
 # Get All Members
@@ -37,30 +38,58 @@ member_model = api.model('Member', {
 class MemberList(Resource):
     def get(self):
         """
-        Get all gym members
+        Get all gym members from the database
         """
-        return jsonify({"members": members})
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, first_name, last_name, email FROM members")
+        members = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        members_list = [
+            {"id": m[0], "first_name": m[1], "last_name": m[2], "email": m[3]}
+            for m in members
+        ]
+
+        return jsonify({"members": members_list})
 
     @api.expect(member_model)
     def post(self):
         """
-        Add a new gym member
+        Add a new gym member to the database
         """
-        new_member = request.json
-        new_member["id"] = max(m["id"] for m in members) + 1  # Auto-increment ID
-        members.append(new_member)
-        return jsonify({"message": "Member added successfully", "member": new_member})
+        data = request.json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "INSERT INTO members (first_name, last_name, email) VALUES (%s, %s, %s) RETURNING id",
+            (data['first_name'], data['last_name'], data['email'])
+        )
+        new_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-# Get a Single Member
+        return jsonify({"message": "Member added successfully", "id": new_id})
+
+# Get, Update, and Delete a Single Member
 @api.route('/members/<int:member_id>')
 class Member(Resource):
     def get(self, member_id):
         """
         Get details of a specific member by ID
         """
-        member = next((m for m in members if m["id"] == member_id), None)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, first_name, last_name, email FROM members WHERE id = %s", (member_id,))
+        member = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
         if member:
-            return jsonify(member)
+            return jsonify({"id": member[0], "first_name": member[1], "last_name": member[2], "email": member[3]})
         return jsonify({"error": "Member not found"}), 404
 
     @api.expect(member_model)
@@ -68,20 +97,32 @@ class Member(Resource):
         """
         Update member details by ID
         """
-        member = next((m for m in members if m["id"] == member_id), None)
-        if not member:
-            return jsonify({"error": "Member not found"}), 404
-
         data = request.json
-        member.update(data)  # Update member data
-        return jsonify({"message": "Member updated successfully", "member": member})
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "UPDATE members SET first_name = %s, last_name = %s, email = %s WHERE id = %s",
+            (data['first_name'], data['last_name'], data['email'], member_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"message": "Member updated successfully"})
 
     def delete(self, member_id):
         """
         Delete a gym member by ID
         """
-        global members
-        members = [m for m in members if m["id"] != member_id]
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM members WHERE id = %s", (member_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
         return jsonify({"message": f"Member {member_id} deleted successfully"})
 
 # Run the Flask App
