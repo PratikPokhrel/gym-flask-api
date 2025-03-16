@@ -3,9 +3,18 @@ from flask_restx import Api, Resource, fields
 from flask_swagger_ui import get_swaggerui_blueprint
 import psycopg2
 import os
+from flask_cors import CORS  # ✅ Import CORS
+import logging
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 # Initialize Flask App and API
 app = Flask(__name__)
+CORS(app)  # ✅ Enable CORS for all routes
+
 api = Api(app, version='1.0', title='Gym Membership API', description='A simple API for gym membership management')
 
 # Database Connection
@@ -33,46 +42,32 @@ member_model = api.model('Member', {
     'email': fields.String(required=True, description='Email address of the member')
 })
 
-# Get All Members
 @api.route('/members')
 class MemberList(Resource):
     def get(self):
         """
         Get all gym members from the database
         """
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, first_name, last_name, email FROM members")
-        members = cursor.fetchall()
-        cursor.close()
-        conn.close()
+        logger.info("Received GET request to fetch all members.")
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, first_name, last_name, email, address, image, status FROM members")
+            members = cursor.fetchall()
+            cursor.close()
+            conn.close()
 
-        members_list = [
-            {"id": m[0], "first_name": m[1], "last_name": m[2], "email": m[3]}
-            for m in members
-        ]
+            members_list = [
+                {"id": m[0], "first_name": m[1], "last_name": m[2], "email": m[3], "address": m[4], "image": m[5], "status": m[6]}
+                for m in members
+            ]
 
-        return jsonify({"members": members_list})
+            logger.info(f"Fetched {len(members_list)} members from the database.")
+            return jsonify({"members": members_list})
 
-    @api.expect(member_model)
-    def post(self):
-        """
-        Add a new gym member to the database
-        """
-        data = request.json
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "INSERT INTO members (first_name, last_name, email) VALUES (%s, %s, %s) RETURNING id",
-            (data['first_name'], data['last_name'], data['email'])
-        )
-        new_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"message": "Member added successfully", "id": new_id})
+        except Exception as e:
+            logger.error(f"Error fetching members: {str(e)}", exc_info=True)
+            return jsonify({"error": "Internal Server Error"}), 500
 
 # Get, Update, and Delete a Single Member
 @api.route('/members/<int:member_id>')
